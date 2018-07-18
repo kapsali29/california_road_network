@@ -1,0 +1,66 @@
+CREATE INDEX ON :Node(id);
+
+///add nodes.csv
+
+LOAD CSV WITH HEADERS FROM "file:///nodes.csv" AS csvLine  
+MERGE (n:Node { id: csvLine.node_id, longitude: toFloat(csvLine.long), latitude: toFloat(csvLine.lat) });
+
+///load categories.csv
+
+CREATE INDEX ON :category(id);
+
+LOAD CSV WITH HEADERS FROM "file:///categories.csv" AS csvLine  
+MERGE (c:category { id: csvLine.category_id, name: csvLine.category_name });
+
+///create relationship roads importing edges.csv
+
+LOAD CSV WITH HEADERS FROM "file:///edges.csv" as input
+MATCH (n:Node  {id: input.start_node}), (n:Node {id: input.end_node})
+CREATE (s)-[road:ROAD { edge_id: input.edge_id, num_pois: input.num_pois, distance: input.distance }]->(e);
+
+///add pois.csv
+CREATE INDEX ON :Poi(poi_id);
+
+LOAD CSV WITH HEADERS FROM "file:///pois2.csv" AS csvLine  
+MERGE (p:Poi {poi_id: csvLine.id, edge: csvLine.edge_id, start: csvLine.start_node, end: csvLine.end_node, category_id: csvLine.category_id, distance: csvLine.distance_from_start });
+
+///create relationship [HAVE] between nodes and pois
+
+MATCH (n:Node), (p:Poi {start: n.id}) CREATE (n)-[has:HAVE]->(p) ;
+
+//create relationship between
+
+MATCH (p:Poi), (c:category {id: p.category_id}) CREATE (p)-[belongs:BELONG]->(c) ;
+
+
+//1.
+
+ MATCH ()-[r:ROAD]-() WITH  r.num_pois as np, r.edge_id as ed ORDER BY np DESC LIMIT 1  MATCH (p:Poi) WHERE p.edge = ed WITH COUNT(p.category_id) AS number, p.category_id as category_id MATCH (k:category) WHERE k.id = category_id RETURN k.name AS category_name, category_id, number ORDER BY  number DESC; 
+ 
+ //2.
+
+ MATCH (f:Node {id: '10'}), (t:Node {id: '16'}) RETURN allShortestPaths((f)-[:ROAD*..]->(t)) 
+
+ //3.
+MATCH (from:Node{id:'10'}),(to:Node{id:'16'}),path=shortestPath((from)-[:ROAD*]->(to))
+UNWIND(rels(path)) AS roads
+RETURN SUM(toFloat(roads.distance)) AS TotalDistance;
+
+//4.
+
+MATCH (p:Poi)-[r:BELONG]->(c:category) WHERE c.name = 'bar' WITH p.poi_id AS pid, c.id as catid  MATCH (n:Node)-[r:HAVE]->(p:Poi) WHERE p.poi_id=pid AND p.category_id=catid WITH n.id as node_id RETURN COUNT(node_id) as number_of_bars, node_id ORDER BY number_of_bars DESC LIMIT 3
+
+//5.
+
+MATCH (from:Node{id:'10'}),(to:Node{id:'21'}),path=allShortestPaths((from)-[:ROAD*]->(to))
+WHERE EXISTS((:Node{id:'17'})-[:ROAD]->(:Node))
+RETURN path
+
+//6.
+
+MATCH (n:Node) WITH n.id AS nid, n.longitude as nlong, n.latitude as nlat,sqrt((toFloat(n.longitude)-(-123))^2 + (toFloat(n.latitude)-(39))^2 )as euclidean_distance RETURN nid, nlong, nlat, euclidean_distance ORDER BY euclidean_distance  LIMIT 5
+
+
+
+
+
